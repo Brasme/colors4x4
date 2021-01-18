@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <sstream>
-#include <vector>
 
 static uint32_t Pack(const size_t *idx,size_t num)
 {
@@ -42,9 +41,9 @@ static uint32_t Reorder(uint32_t v, size_t idx)
 uint32_t NextModulo(uint32_t hash, uint8_t m)
 {
 	if (m > 16) m = 16;
-	for (int i=0;i<8;++i) {
+	for (auto i=0;i<8;++i) {
 		const uint32_t mask = 0xf << (i * 4);
-		uint32_t v = (hash & mask) >> (i * 4);
+		auto v = (hash & mask) >> (i * 4);
 		v = (v + 1) % m;
 		hash = (hash & ~mask) | (v << (i * 4));
 		if (v != 0)
@@ -123,13 +122,9 @@ public:
 	}
 
 	Board& Next() {
-		const char max = nc + m_;
-		char* p = v_;
 		for (size_t i = 0; i < 8; ++i) {
-			(*p)++;
-			if (*p >= max)* p = nc;
-			else return *this;
-			p++;
+			if (NextV(i))
+				return *this;			
 		}
 		return *this;
 	}
@@ -155,9 +150,9 @@ public:
 	
 	bool NextTraverse(const Board &end)
 	{
-		static const size_t orderList[] = {  C,D,A,B,E,F,G,H };
-		const size_t reorder = Pack(orderList, 8);
-		const size_t back    = Unpack(orderList, 8);
+		static const size_t order_list[] = {  C,D,A,B,E,F,G,H };
+		const size_t reorder = Pack(order_list, 8);
+		const size_t back    = Unpack(order_list, 8);
 
 		uint32_t hash = Reorder(operator uint32_t(),reorder);
 		hash = Reorder(NextModulo(hash,m_), back);
@@ -197,18 +192,27 @@ public:
 private:
 	uint8_t m_;
 	char v_[9]{};
-	void NextV(size_t idx) { char& v = v_[idx]; v += 1; if (v >= (nc + m_)) v = nc; }
+	bool NextV(size_t idx) {
+		char& v = v_[idx];
+		v += 1;
+		if (v >= (nc + m_))
+		{
+			v = nc;
+			return false;
+		}
+		return true;
+	}
 
 };
 
 const char Board::nc = '0';
 const char* Board::ch = "0123456789ABCDEF";
 
-int main(int argc,char *argv[])
+int main(const int argc,char *argv[])
 {
-	Board  traverseStartB;
-	size_t traverseStartIdx=0;
-	std::string lastLine="";
+	Board  traverse_start_b;
+	size_t traverse_start_idx=0;
+	std::string last_line;
 
 	const char* def = argc>1?argv[1]:"00000000";
 	Board b(0x1234567, 8);
@@ -221,12 +225,29 @@ int main(int argc,char *argv[])
 	for (std::string line; !done && std::getline(std::cin, line);) 
 	{		
 		if (line.empty())
-			line = lastLine;
-		lastLine = line;
-
+			line = last_line;
+		
+		if (!done && line == "h") {
+			std::cout <<
+				"Help info:\n" <<
+				"    Start application with argument with start pattern, modulo = max of pattern\n" <<
+				" q : quit\n" <<
+				" n : next (ignore valid)\n" <<
+				" N : next (valid)\n" <<
+				" V : Scan valid boards\n" <<
+				" <pattern> : A combination of 0-9,A-F\n" <<
+				" t : Traverse another order (ignore valid)\n" <<
+				" T : Traverse another order (valid)\n" <<
+				" s : Show simple board info\n" <<
+				" S : Show extended board\n";
+		}
+		else {
+			last_line = line;
+		}
 		std::cout << "Handle: \"" << line << "\"\n%> ";
 		done = line == "q";
 
+		
 		if (!done && line == "n") {
 			b.Next();
 			line = "s";
@@ -237,19 +258,17 @@ int main(int argc,char *argv[])
 		}
 
 		if (!done && line == "V") {
-			int i = 0;
-			Board start = b;
-			bool ok = true;
+			auto i = 0;
+			auto start = b;
 			if (!start.IsValid())
-				ok=start.NextValid();
+				start.NextValid();
 			Board scan = start;
 			std::cout << "Scan valid boards:\n";
 			do
 			{
 				i++;
-				std::cout << "Valid," << scan.Str() << "," << i << "\n";
-				ok = scan.NextValid();
-			} while (ok && scan != start);
+				std::cout << "Valid," << scan.Str() << "," << i << "\n";				
+			} while (scan.NextValid() && scan != start);
 			std::cout << "Found " << i << " combinations\n";
 		}
 
@@ -265,24 +284,24 @@ int main(int argc,char *argv[])
 		}
 
 		if (!done && line == "t") {
-			if (traverseStartIdx == 0) {
+			if (traverse_start_idx == 0) {
 				while (!b.IsValid())
 					b.NextTraverse(b);
-				traverseStartB = b;
+				traverse_start_b = b;
 				std::cout << "Traverse first match\n";
-				traverseStartIdx++;
+				traverse_start_idx++;
 			} else {
-				b.NextTraverse(traverseStartB);
+				b.NextTraverse(traverse_start_b);
 				while (!b.IsValid())
-					b.NextTraverse(traverseStartB);
+					b.NextTraverse(traverse_start_b);
 
-				if (b == traverseStartB) {
+				if (b == traverse_start_b) {
 					std::cout << "Traverse next complete\n";
-					traverseStartIdx = 0;
+					traverse_start_idx = 0;
 				}
 				else {
-					traverseStartIdx++;
-					std::cout << "Traverse next : found match " << traverseStartIdx << "\n";
+					traverse_start_idx++;
+					std::cout << "Traverse next : found match " << traverse_start_idx << "\n";
 				}
 			}			
 			line = "S";
@@ -292,15 +311,13 @@ int main(int argc,char *argv[])
 			int i=0;
 			std::cout << "Traverse boards:\n";
 			Board start = b;
-			bool ok = true;
 			if (!start.IsValid())
-				ok = start.NextValid();
+				start.NextValid();
 			Board scan = start;
 			do {
 				i++;
-				std::cout << "Valid," << scan.Str() << "," << i << "\n";
-				ok = scan.NextTraverse(start);
-			} while (ok);
+				std::cout << "Valid," << scan.Str() << "," << i << "\n";				
+			} while (scan.NextTraverse(start));
 			std::cout << "Found " << i << " combinations\n";
 		}
 
@@ -315,6 +332,7 @@ int main(int argc,char *argv[])
 			std::cout << "Board = // valid=" << (b.IsValid() ? "Yes" : "No") << "\n" << b.BoardStr() << "\n";
 
 		
-	} 
+	}
+	return 0;
 }
 
